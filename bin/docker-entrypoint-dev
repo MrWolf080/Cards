@@ -1,0 +1,14 @@
+#!/bin/bash
+set -e
+
+# Удаляем stale pid-файл, иначе Rails не запустится
+if [ -f /rails/tmp/pids/server.pid ]; then
+  rm -f /rails/tmp/pids/server.pid
+fi
+
+# Если БД ещё нет — создаём и мигрируем
+if [ "${SKIP_DB_SETUP:-0}" != "1" ]; then
+  ./bin/rails db:prepare
+fi
+
+exec "$@"

@@ -1,0 +1,46 @@
+  services:
+    db:
+      image: postgres:16-alpine
+      container_name: rails-db
+      restart: unless-stopped
+      environment:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: password
+        POSTGRES_DB: myapp_development
+      volumes:
+        - ./pg_data:/var/lib/postgresql/data
+      ports:
+        - "5432:5432"     # удобно подключаться с хоста (psql, GUI)
+
+    web:
+      build:
+        context: .
+        dockerfile: Dockerfile.dev
+      container_name: rails-web
+      restart: unless-stopped
+      command: bash -c "rm -f tmp/pids/server.pid && bundle exec rails server -b 0.0.0.0 -p 3000"
+      volumes:
+        # Монтируем код для hot-reload
+        - .:/rails
+        # Не даём локальному bundle затирать гемы из образа
+        #- ./ruby-bundle-cache:/usr/local/bundle
+      ports:
+        - "3000:3000"
+      environment:
+        RAILS_ENV: development
+        DATABASE_URL: postgres://postgres:password@db:5432/myapp_development
+        RAILS_LOG_TO_STDOUT: "true"
+        # Для дебага в контейнере
+        WEB_CONCURRENCY: "1"
+      stdin_open: true
+      tty: true
+
+    frontend:
+      image: node:20-alpine
+      container_name: rails-frontend
+      working_dir: /app
+      volumes:
+        - ./frontend:/app
+      ports:
+        - "5173:5173"
+      command: sh -c "npm install --legacy-peer-deps && npm run dev -- --host"
