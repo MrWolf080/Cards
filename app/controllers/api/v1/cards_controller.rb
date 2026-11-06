@@ -54,12 +54,13 @@ module Api
           example: entry.example_en
         )
 
-        if card.save
-          card.create_card_progress(level: 0, status: :new_card, next_review_at: nil)
-          head :created
-        else
-          render json: { errors: card.errors.full_messages }, status: :unprocessable_entity
+        Card.transaction do
+          card.save!
+          card.create_card_progress!(level: 0, status: :new_card, next_review_at: nil)
         end
+        head :created
+      rescue ActiveRecord::RecordInvalid => error
+        render json: { errors: error.record.errors.full_messages }, status: :unprocessable_entity
       end
 
       # DELETE /api/v1/decks/:deck_id/cards/:id

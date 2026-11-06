@@ -1,15 +1,19 @@
+import { useUserUpdates } from '../hooks/useUserUpdates';
 import { useState, useEffect } from 'react';
 import Header from '../components/Header.jsx';
 
 export default function Stats() {
     const [data, setData] = useState(null);
 
-    useEffect(() => {
+    const refreshData = () => {
         fetch('/api/v1/stats', { credentials: 'include' })
             .then(res => res.json())
             .then(data => setData(data))
             .catch(err => console.error(err));
-    }, []);
+    };
+
+    useEffect(() => { refreshData(); }, []);
+    useUserUpdates(['card.reviewed', 'session.finished', 'card.changed', 'deck.changed', 'profile.changed'], refreshData);
 
     if (!data) return <div className="page">Загрузка...</div>;
 

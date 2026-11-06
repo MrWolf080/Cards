@@ -1,120 +1,66 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import Header from '../components/Header.jsx';
+import { useLiveStudy } from '../hooks/useLiveStudy';
 
 export default function Quiz() {
     const { id } = useParams();
-    const navigate = useNavigate();
+    const live = useLiveStudy(id, 'quiz');
+    const [feedback, setFeedback] = useState(null);
+    const currentQuestion = live.items[0];
+    const selectedOption = feedback && currentQuestion && feedback.cardId === currentQuestion.card_id ? feedback.option : null;
+    const isAnswered = !!currentQuestion && live.retainedId === currentQuestion.card_id;
+    const correctCount = live.correct_count;
+    const total = live.answered_count + live.items.length - (isAnswered ? 1 : 0);
 
-    const [deckTitle, setDeckTitle] = useState('');
-    const [questions, setQuestions] = useState([]);
-    const [currentIndex, setCurrentIndex] = useState(0);
-    const [sessionId, setSessionId] = useState(null); // 👈 Добавили ID сессии
+    const handleOptionClick = async option => {
+        if (isAnswered || live.saving || !currentQuestion) return;
+        const question = currentQuestion;
+        if (await live.answer(question, option === question.correct_answer ? 'good' : 'forgot')) {
+            setFeedback({ cardId: question.card_id, option });
+        }
+    };
 
-    // Состояния для ответа
-    const [selectedOption, setSelectedOption] = useState(null);
-    const [isAnswered, setIsAnswered] = useState(false);
-    const [correctCount, setCorrectCount] = useState(0);
-    const [error, setError] = useState(null);
-    const [loaded, setLoaded] = useState(false);
+    const handleNext = async () => {
+        if (live.saving || !isAnswered) return;
+        if (live.items.length === 1) await live.finish();
+        else { setFeedback(null); await live.next(); }
+    };
 
     useEffect(() => {
-        fetch(`/api/v1/decks/${id}/quiz`, { credentials: 'include' })
-            .then(res => res.json())
-            .then(data => {
-                if (data.error) {
-                    setError(data.error);
-                } else {
-                    setDeckTitle(data.deck_title);
-                    setQuestions(data.questions);
-                    setSessionId(data.session_id); // 👈 Сохраняем ID сессии
-                    setLoaded(true);
-                }
-            })
-            .catch(err => console.error(err));
-    }, [id]);
+        const handleKeyDown = event => {
+            if (live.loading || live.saving || event.repeat) return;
+            if (event.key === 'Enter' && isAnswered) { event.preventDefault(); handleNext(); }
+            if (!isAnswered && currentQuestion && ['1', '2', '3', '4'].includes(event.key)) {
+                const option = currentQuestion.options[Number(event.key) - 1];
+                if (option !== undefined) { event.preventDefault(); handleOptionClick(option); }
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    });
 
-    if (error) {
-        return (
-            <>
-                <Header />
-                <div className="page">
-                    <h1 className="page__title">Тест недоступен</h1>
-                    <p className="page__subtitle">{error}</p>
-                    <Link to={`/decks/${id}`} className="btn" style={{ marginTop: '20px' }}>Вернуться в колоду</Link>
-                </div>
-            </>
-        );
-    }
-
-    if (!loaded) return <div className="page">Загрузка...</div>;
-    if (questions.length === 0) return (
+    if (live.loading) return <div className="page">Загрузка...</div>;
+    if (!currentQuestion) return (
         <>
             <Header />
             <main className="page">
-                <h1 className="page__title">На сегодня всё повторено</h1>
-                <p className="page__subtitle">Нет карточек, срок которых наступил. Загляните завтра или добавьте слова в колоду.</p>
-                <Link to={`/decks/${id}`} className="btn" style={{ marginTop: '20px' }}>Вернуться в колоду</Link>
+                <h1 className="page__title">{live.finished ? 'Сессия завершена' : live.error ? 'Тест недоступен' : 'На сегодня всё повторено'}</h1>
+                <p className="page__subtitle">{live.finished ? 'Занятие завершено в другой вкладке или на другом устройстве.' : 'Список обновляется автоматически при изменении колоды.'}</p>
+                {live.error && <p role="alert">{live.error}</p>}
+                <button onClick={live.refresh} className="btn btn--ghost">Обновить данные</button>
+                {live.session_id && !live.finished && <button onClick={live.finish} disabled={live.saving} className="btn">Завершить тест</button>}
+                <Link to={`/decks/${id}`} className="btn btn--ghost">Вернуться в колоду</Link>
             </main>
         </>
     );
-
-    const currentQuestion = questions[currentIndex];
-
-    const handleOptionClick = async (option) => {
-        if (isAnswered) return; // Блокируем клики после ответа
-
-        setSelectedOption(option);
-        setIsAnswered(true);
-
-        const isCorrect = option === currentQuestion.correct_answer;
-        if (isCorrect) setCorrectCount(prev => prev + 1);
-
-        // 👇 Отправляем результат на сервер с session_id
-        await fetch(`/api/v1/decks/${id}/study/answer`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-                card_id: currentQuestion.card_id,
-                rating: isCorrect ? 'good' : 'forgot',
-                session_id: sessionId
-            })
-        });
-    };
-
-    const finishQuiz = async () => {
-        // 👇 Сообщаем серверу, что тест завершен
-        if (sessionId) {
-            await fetch(`/api/v1/decks/${id}/study/finish`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ session_id: sessionId })
-            });
-        }
-
-        // Считаем итоговый результат (учитывая последний клик)
-        const finalCorrect = correctCount + (selectedOption === currentQuestion.correct_answer ? 1 : 0);
-        alert(`Тест завершен! Правильных ответов: ${finalCorrect} из ${questions.length}`);
-        navigate(`/decks/${id}`);
-    };
-
-    const handleNext = () => {
-        if (currentIndex < questions.length - 1) {
-            setCurrentIndex(prev => prev + 1);
-            setSelectedOption(null);
-            setIsAnswered(false);
-        } else {
-            finishQuiz();
-        }
-    };
 
     return (
         <>
             <Header />
             <main className="page study-page">
 
+                {live.error && <p role="alert">{live.error}</p>}
                 {/* Верхняя панель */}
                 <header className="study-header">
                     <div>
@@ -129,8 +75,8 @@ export default function Quiz() {
 
                     <div className="study-counter">
                         <div className="study-counter__nums">
-                            <span className="study-counter__current">{currentIndex + 1}</span>
-                            <span className="study-counter__total">/ {questions.length}</span>
+                            <span className="study-counter__current">{live.answered_count + (isAnswered ? 0 : 1)}</span>
+                            <span className="study-counter__total">/ {total}</span>
                         </div>
                         <div className="study-counter__deck">Верно: {correctCount}</div>
                     </div>
@@ -159,7 +105,7 @@ export default function Quiz() {
                                 key={index}
                                 className={btnClass}
                                 onClick={() => handleOptionClick(option)}
-                                disabled={isAnswered}
+                                disabled={isAnswered || live.saving}
                             >
                                 {isAnswered && isCorrect && <span className="quiz-icon">✓</span>}
                                 {isAnswered && isSelected && !isCorrect && <span className="quiz-icon">✕</span>}
@@ -172,8 +118,8 @@ export default function Quiz() {
                 {/* Кнопка Далее (появляется после ответа) */}
                 {isAnswered && (
                     <div style={{ marginTop: '24px' }}>
-                        <button onClick={handleNext} className="btn">
-                            {currentIndex < questions.length - 1 ? 'Далее' : 'Завершить тест'}
+                        <button onClick={handleNext} disabled={live.saving} className="btn">
+                            {live.items.length > 1 ? 'Далее' : 'Завершить тест'}
                         </button>
                     </div>
                 )}

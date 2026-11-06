@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useUserUpdates } from '../hooks/useUserUpdates';
 import { Link, useNavigate } from 'react-router-dom';
 import Header from '../components/Header'; // Твой компонент шапки
 
@@ -30,6 +31,8 @@ export default function Decks() {
     useEffect(() => {
         fetchDecks();
     }, []);
+
+    useUserUpdates(['card.reviewed', 'card.changed', 'deck.changed'], fetchDecks);
 
     // Создание новой колоды
     const handleCreateDeck = async (e) => {

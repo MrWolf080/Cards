@@ -1,3 +1,4 @@
+import { useUserUpdates } from '../hooks/useUserUpdates';
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Header from '../components/Header.jsx';
@@ -6,7 +7,7 @@ export default function Dashboard() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
+    const refreshData = () => {
         fetch('/api/v1/dashboard', { credentials: 'include' })
             .then(res => res.json())
             .then(data => {
@@ -14,7 +15,10 @@ export default function Dashboard() {
                 setLoading(false);
             })
             .catch(err => console.error(err));
-    }, []);
+    };
+
+    useEffect(() => { refreshData(); }, []);
+    useUserUpdates(['card.reviewed', 'session.finished', 'card.changed', 'deck.changed', 'profile.changed'], refreshData);
 
     if (loading) return <div className="page">Загрузка...</div>;
 

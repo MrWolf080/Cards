@@ -1,4 +1,10 @@
 class Deck < ApplicationRecord
+  after_commit :broadcast_change, on: [:create, :update, :destroy]
+
+  private def broadcast_change
+    UserUpdatesChannel.broadcast_to(user, type: "deck.changed", data: { deck_id: id, deleted: destroyed? })
+  end
+
   belongs_to :user
   has_many :cards, dependent: :destroy
   has_many :study_sessions, dependent: :destroy

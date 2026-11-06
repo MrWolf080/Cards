@@ -10,22 +10,13 @@ module Api
                         .order(Arel.sql('card_progresses.next_review_at ASC NULLS LAST, cards.id ASC'))
                         .to_a
 
-        # Повторять нечего: пустую сессию не создаём
-        if due_cards.empty?
-          return render json: { session_id: nil, deck_title: deck.title, cards: [] }
-        end
-
-        study_session = Current.user.study_sessions.find_or_create_by!(
-          deck: deck, mode: :cards, finished_at: nil
-        ) { |s| s.started_at = Time.current }
-
-        render json: {
-          session_id: study_session.id,
-          deck_title: deck.title,
+        study_session = session_for(deck, :cards, due_cards.any?)
+        due_cards = [] if study_session&.finished_at
+        render json: session_data(study_session, deck).merge(
           cards: due_cards.map { |card|
             { id: card.id, front: card.front, back: card.back, level: card.card_progress.level }
           }
-        }
+        )
       end
 
       # GET /api/v1/decks/:deck_id/quiz
@@ -44,13 +35,8 @@ module Api
                         .order(Arel.sql('card_progresses.next_review_at ASC NULLS LAST, cards.id ASC'))
                         .to_a
 
-        if due_cards.empty?
-          return render json: { session_id: nil, deck_title: deck.title, questions: [] }
-        end
-
-        study_session = Current.user.study_sessions.find_or_create_by!(
-          deck: deck, mode: :quiz, finished_at: nil
-        ) { |s| s.started_at = Time.current }
+        study_session = session_for(deck, :quiz, due_cards.any?)
+        due_cards = [] if study_session&.finished_at
 
         questions = due_cards.map do |card|
           wrong = all_cards.reject { |id, back| id == card.id || back == card.back }
@@ -63,59 +49,85 @@ module Api
           }
         end
 
-        render json: { session_id: study_session.id, deck_title: deck.title, questions: questions }
+        render json: session_data(study_session, deck).merge(
+          questions: questions, existing_card_ids: all_cards.map(&:first), available_answers: all_cards.map(&:last).uniq
+        )
       end
 
       # POST /api/v1/decks/:deck_id/study/answer
       def answer
         deck = Current.user.decks.find(params[:deck_id])
         card = deck.cards.find(params[:card_id])
-        session = Current.user.study_sessions.find(params[:session_id])
+        session = deck.study_sessions.where(user: Current.user).find(params[:session_id])
         rating = params[:rating]
 
-        # 👇 Сохраняем ответ в историю
-        session.session_answers.create!(
-          card: card,
-          rating: rating,
-          is_correct: rating != 'forgot'
-        )
+        card.with_lock do
+          if session.reload.finished_at || session.session_answers.exists?(card: card) ||
+              (card.card_progress.next_review_at && card.card_progress.next_review_at > Date.current)
+            return render json: { error: "Карточка уже оценена или сессия завершена. Данные обновлены." }, status: :conflict
+          end
+          # Ответ и прогресс фиксируются вместе до рассылки события.
+          session.session_answers.create!(
+            card: card,
+            rating: rating,
+            is_correct: rating != 'forgot'
+          )
 
-        progress = card.card_progress
-        case rating
-        when 'forgot'
-          progress.level = 0
-          progress.next_review_at = Date.current + 1.day
-          progress.status = :learning
-        when 'hard'
-          progress.next_review_at = Date.current + 2.days
-          progress.status = :learning if progress.new_card?
-        when 'good'
-          progress.level = [progress.level + 1, 5].min
-          progress.next_review_at = Date.current + 4.days
-          progress.status = :learning
-        when 'easy'
-          progress.level = [progress.level + 2, 5].min
-          progress.next_review_at = Date.current + 7.days
-          progress.status = :learning
-        end
+          progress = card.card_progress
+          case rating
+          when 'forgot'
+            progress.level = 0
+            progress.next_review_at = Date.current + 1.day
+            progress.status = :learning
+          when 'hard'
+            progress.next_review_at = Date.current + 2.days
+            progress.status = :learning if progress.new_card?
+          when 'good'
+            progress.level = [progress.level + 1, 5].min
+            progress.next_review_at = Date.current + 4.days
+            progress.status = :learning
+          when 'easy'
+            progress.level = [progress.level + 2, 5].min
+            progress.next_review_at = Date.current + 7.days
+            progress.status = :learning
+          end
 
-        if progress.level == 5
-          progress.status = :learned
-          progress.next_review_at = Date.current + 14.days
-        end
+          if progress.level == 5
+            progress.status = :learned
+            progress.next_review_at = Date.current + 14.days
+          end
 
-        if progress.save
-          head :ok
-        else
-          render json: { errors: progress.errors.full_messages }, status: :unprocessable_entity
+          progress.save!
         end
+        head :ok
+      rescue ActiveRecord::RecordInvalid => error
+        render json: { errors: error.record.errors.full_messages }, status: :unprocessable_entity
       end
 
       # POST /api/v1/decks/:deck_id/study/finish
       def finish
-        session = Current.user.study_sessions.find(params[:session_id])
-        session.update!(finished_at: Time.current) # 👇 Фиксируем время окончания
+        deck = Current.user.decks.find(params[:deck_id])
+        session = deck.study_sessions.where(user: Current.user).find(params[:session_id])
+        session.update!(finished_at: Time.current) unless session.finished_at
         head :ok
+      end
+      private
+
+      def session_for(deck, mode, has_cards)
+        scope = deck.study_sessions.where(user: Current.user, mode: mode)
+        return scope.find(params[:session_id]) if params[:session_id].present?
+        return unless has_cards
+
+        scope.find_or_create_by!(finished_at: nil) { |session| session.started_at = Time.current }
+      end
+
+      def session_data(session, deck)
+        {
+          session_id: session&.id, deck_title: deck.title,
+          finished: session&.finished_at.present?,
+          answered_count: session ? session.session_answers.count : 0,
+          correct_count: session ? session.session_answers.where(is_correct: true).count : 0
+        }
       end
     end
   end

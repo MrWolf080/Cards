@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useUserUpdates } from '../hooks/useUserUpdates';
 import Header from '../components/Header.jsx';
 
 export default function Deck() {
     const { id } = useParams();
+    const navigate = useNavigate();
     const [deck, setDeck] = useState(null);
     const [cards, setCards] = useState([]);
     const [suggestions, setSuggestions] = useState([]);
@@ -50,6 +52,16 @@ export default function Deck() {
     useEffect(() => {
         fetchData();
     }, [id]);
+
+    useUserUpdates(['card.changed', 'card.reviewed', 'deck.changed'], async () => {
+        const deckRes = await fetch(`/api/v1/decks/${id}`, { credentials: 'include' });
+        if (deckRes.status === 404) { navigate('/decks', { replace: true }); return; }
+        if (!deckRes.ok) return;
+        const cardsRes = await fetch(`/api/v1/decks/${id}/cards`, { credentials: 'include' });
+        if (!cardsRes.ok) return;
+        setDeck(await deckRes.json());
+        setCards(await cardsRes.json());
+    }, id);
 
     // 3. Кнопка "Обновить все"
     const handleRefreshAll = async () => {

@@ -1,4 +1,10 @@
 class User < ApplicationRecord
+  after_update_commit :broadcast_profile_change, if: -> { saved_change_to_daily_goal? || saved_change_to_time_zone? }
+
+  private def broadcast_profile_change
+    UserUpdatesChannel.broadcast_to(self, type: "profile.changed", data: {})
+  end
+
   has_secure_password
   has_many :sessions, dependent: :destroy
   has_many :decks, dependent: :destroy

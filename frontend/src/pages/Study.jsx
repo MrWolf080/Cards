@@ -1,118 +1,68 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams, Link } from 'react-router-dom';
 import Header from '../components/Header.jsx';
+import { useLiveStudy } from '../hooks/useLiveStudy';
 
 export default function Study() {
     const { id } = useParams();
-    const navigate = useNavigate();
-
-    const [deckTitle, setDeckTitle] = useState('');
-    const [cards, setCards] = useState([]);
-    const [currentIndex, setCurrentIndex] = useState(0);
+    const live = useLiveStudy(id, 'cards');
     const [isFlipped, setIsFlipped] = useState(false);
-    const [loading, setLoading] = useState(true);
-    const [sessionId, setSessionId] = useState(null);
+    const currentCard = live.items[0];
+    const currentCardId = currentCard?.id;
+    const deckTitle = live.deck_title;
+    const total = live.answered_count + live.items.length;
+    const progressPercent = total ? live.answered_count / total * 100 : 0;
+    const finishSession = live.finish;
 
-    useEffect(() => {
-        fetch(`/api/v1/decks/${id}/study`, { credentials: 'include' })
-            .then(res => res.json())
-            .then(data => {
-                setDeckTitle(data.deck_title);
-                setCards(data.cards);
-                setSessionId(data.session_id); // 👈 Сохраняем ID
-                setLoading(false);
-            })
-    }, [id]);
+    useEffect(() => { setIsFlipped(false); }, [currentCardId]);
 
-    const finishSession = async () => {
-        if (sessionId) {
-            await fetch(`/api/v1/decks/${id}/study/finish`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ session_id: sessionId })
-            });
+    const handleRate = async rating => {
+        if (!isFlipped || live.saving || !currentCard) return;
+        const snapshot = await live.answer(currentCard, rating);
+        if (snapshot) {
+            setIsFlipped(false);
+            if (snapshot.cards?.length === 0 && !snapshot.finished) await finishSession();
         }
-        navigate(`/decks/${id}`);
     };
 
-    // Отправка оценки на сервер
-    const handleRate = useCallback(async (rating) => {
-        if (!isFlipped) return; // Нельзя оценить, пока не перевернули
-
-        const currentCard = cards[currentIndex];
-
-        // Отправляем запрос (не блокируя UI)
-        fetch(`/api/v1/decks/${id}/study/answer`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-                card_id: currentCard.id,
-                rating,
-                session_id: sessionId // 👈 Передаем ID
-            })
-        });
-
-        // Переходим к следующей карточке
-        if (currentIndex < cards.length - 1) {
-            setIsFlipped(false);
-            setTimeout(() => setCurrentIndex(prev => prev + 1), 150); // Небольшая задержка для анимации
-        } else {
-            // Если карточки закончились
-            await fetch(`/api/v1/decks/${id}/study/finish`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ session_id: sessionId })
-            });
-            alert('Сессия завершена!');
-            navigate(`/decks/${id}`);
-        }
-    }, [cards, currentIndex, id, isFlipped, navigate]);
-
-    // Обработка клавиатуры
     useEffect(() => {
-        const handleKeyDown = (e) => {
-            if (loading || cards.length === 0) return;
-
-            if (e.code === 'Space') {
-                e.preventDefault();
-                setIsFlipped(prev => !prev);
+        const handleKeyDown = event => {
+            if (live.loading || live.saving || event.repeat) return;
+            if (event.code === 'Space' && currentCard) {
+                event.preventDefault();
+                setIsFlipped(previous => !previous);
             }
-
-            if (isFlipped) {
-                if (e.key === '1') handleRate('forgot');
-                if (e.key === '2') handleRate('hard');
-                if (e.key === '3') handleRate('good');
-                if (e.key === '4') handleRate('easy');
+            if (isFlipped && currentCard && ['1', '2', '3', '4'].includes(event.key)) {
+                event.preventDefault();
+                handleRate(['forgot', 'hard', 'good', 'easy'][Number(event.key) - 1]);
             }
+            if (event.key === 'Enter' && !currentCard) finishSession();
         };
-
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isFlipped, handleRate, loading, cards.length]);
+    });
 
-    if (loading) return <div className="page">Загрузка...</div>;
-    if (cards.length === 0) return (
+    if (live.loading) return <div className="page">Загрузка...</div>;
+    if (!currentCard) return (
         <>
             <Header />
             <main className="page">
-                <h1 className="page__title">На сегодня всё повторено</h1>
-                <p className="page__subtitle">Нет карточек, срок которых наступил. Загляните завтра или добавьте слова в колоду.</p>
-                <Link to={`/decks/${id}`} className="btn" style={{ marginTop: '20px' }}>Вернуться в колоду</Link>
+                <h1 className="page__title">{live.finished ? 'Сессия завершена' : 'На сегодня всё повторено'}</h1>
+                <p className="page__subtitle">{live.finished ? 'Занятие завершено в другой вкладке или на другом устройстве.' : 'Новых карточек и карточек к повторению пока нет. Список обновится автоматически, если вы добавите слова.'}</p>
+                {live.error && <p role="alert">{live.error}</p>}
+                <button onClick={live.refresh} className="btn btn--ghost">Обновить данные</button>
+                {live.session_id && !live.finished && <button onClick={finishSession} disabled={live.saving} className="btn">Завершить сессию</button>}
+                <Link to={`/decks/${id}`} className="btn btn--ghost">Вернуться в колоду</Link>
             </main>
         </>
     );
-
-    const currentCard = cards[currentIndex];
-    const progressPercent = ((currentIndex) / cards.length) * 100;
 
     return (
         <>
             <Header />
             <main className="page study-page">
 
+                {live.error && <p role="alert">{live.error}</p>}
                 {/* Верхняя панель */}
                 <header className="study-header">
                     <div>
@@ -127,8 +77,8 @@ export default function Study() {
 
                     <div className="study-counter">
                         <div className="study-counter__nums">
-                            <span className="study-counter__current">{currentIndex + 1}</span>
-                            <span className="study-counter__total">/ {cards.length}</span>
+                            <span className="study-counter__current">{live.answered_count + 1}</span>
+                            <span className="study-counter__total">/ {total}</span>
                         </div>
                         <div className="study-counter__deck">{deckTitle}</div>
                     </div>
@@ -156,22 +106,22 @@ export default function Study() {
 
                 {/* Кнопки оценки (появляются только после переворота) */}
                 <div className={`study-actions ${isFlipped ? 'study-actions--visible' : ''}`}>
-                    <button onClick={() => handleRate('forgot')} className="study-btn">
+                    <button onClick={() => handleRate('forgot')} className="study-btn" disabled={live.saving}>
                         <strong>Забыл</strong> <span>1 день</span>
                     </button>
-                    <button onClick={() => handleRate('hard')} className="study-btn">
+                    <button onClick={() => handleRate('hard')} className="study-btn" disabled={live.saving}>
                         <strong>Трудно</strong> <span>2 дня</span>
                     </button>
-                    <button onClick={() => handleRate('good')} className="study-btn">
+                    <button onClick={() => handleRate('good')} className="study-btn" disabled={live.saving}>
                         <strong>Хорошо</strong> <span>4 дня</span>
                     </button>
-                    <button onClick={() => handleRate('easy')} className="study-btn">
+                    <button onClick={() => handleRate('easy')} className="study-btn" disabled={live.saving}>
                         <strong>Легко</strong> <span>7 дней</span>
                     </button>
                 </div>
 
                 <div style={{ marginTop: '32px' }}>
-                    <button onClick={finishSession} className="btn btn--ghost">
+                    <button onClick={finishSession} disabled={live.saving} className="btn btn--ghost">
                         Завершить сессию
                     </button>
                 </div>
