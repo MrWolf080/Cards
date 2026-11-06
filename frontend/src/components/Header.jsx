@@ -32,7 +32,7 @@ export default function Header() {
                 <div className="app-header__right">
                     {user ? (
                         <>
-                            <span className="app-header__email">{user.email}</span>
+                            <Link to="/profile" className="app-header__email" aria-label={`Профиль: ${user.email}`}>{user.email}</Link>
                             <button onClick={handleLogout} className="btn btn--ghost">Выйти</button>
                         </>
                     ) : (

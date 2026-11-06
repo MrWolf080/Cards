@@ -9,6 +9,7 @@ import Study from "./pages/Study.jsx";
 import Quiz from "./pages/Quiz.jsx";
 import Dashboard from './pages/Dashboard.jsx';
 import Stats from './pages/Stats.jsx';
+import Profile from './pages/Profile.jsx';
 
 function RequireAuth() {
   const { user, loading } = useAuth();
@@ -30,6 +31,7 @@ function App() {
             <Route path="/study/:id" element={<Study />} />
             <Route path="/study/:id/quiz" element={<Quiz />} />
             <Route path="/stats" element={<Stats />} />
+            <Route path="/profile" element={<Profile />} />
           </Route>
         </Routes>
       </BrowserRouter>

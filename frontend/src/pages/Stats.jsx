@@ -14,7 +14,7 @@ export default function Stats() {
     if (!data) return <div className="page">Загрузка...</div>;
 
     // Считаем процент выполнения дневной цели
-    const goalPercent = Math.min((data.today_answers / data.daily_goal) * 100, 100);
+    const goalPercent = Math.min((data.new_cards_today / data.daily_goal) * 100, 100);
 
     return (
         <>
@@ -41,9 +41,9 @@ export default function Stats() {
                     </div>
 
                     <div className="metric">
-                        <p className="metric__label">Цель на сегодня</p>
+                        <p className="metric__label">Новые карточки сегодня</p>
                         <p className="metric__value">
-                            {data.today_answers} <span style={{ color: '#ccc', fontSize: '1.2rem' }}>из {data.daily_goal}</span>
+                            {data.new_cards_today} <span style={{ color: '#ccc', fontSize: '1.2rem' }}>из {data.daily_goal}</span>
                         </p>
                         <div className="progress" style={{ marginTop: '16px', height: '6px' }}>
                             <div className="progress__fill" style={{ width: `${goalPercent}%` }}></div>

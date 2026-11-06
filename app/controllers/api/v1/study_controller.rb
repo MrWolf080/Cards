@@ -84,24 +84,24 @@ module Api
         case rating
         when 'forgot'
           progress.level = 0
-          progress.next_review_at = Date.today + 1.day
+          progress.next_review_at = Date.current + 1.day
           progress.status = :learning
         when 'hard'
-          progress.next_review_at = Date.today + 2.days
+          progress.next_review_at = Date.current + 2.days
           progress.status = :learning if progress.new_card?
         when 'good'
           progress.level = [progress.level + 1, 5].min
-          progress.next_review_at = Date.today + 4.days
+          progress.next_review_at = Date.current + 4.days
           progress.status = :learning
         when 'easy'
           progress.level = [progress.level + 2, 5].min
-          progress.next_review_at = Date.today + 7.days
+          progress.next_review_at = Date.current + 7.days
           progress.status = :learning
         end
 
         if progress.level == 5
           progress.status = :learned
-          progress.next_review_at = Date.today + 14.days
+          progress.next_review_at = Date.current + 14.days
         end
 
         if progress.save

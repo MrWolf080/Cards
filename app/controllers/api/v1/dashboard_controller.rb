@@ -4,7 +4,7 @@ module Api
       def show
         # 1. К повторению сегодня (карточки, у которых next_review_at <= сегодня)
         cards_to_review = Current.user.decks.joins(cards: :card_progress)
-                                 .where(card_progresses: { next_review_at: ..Date.today }).count
+                                 .where(card_progresses: { next_review_at: ..Date.current }).count
 
         # 2. Выучено слов (status: learned)
         learned_words = Current.user.decks.joins(cards: :card_progress)
@@ -33,10 +33,10 @@ module Api
 
         # 5. График активности за 7 дней (количество карточек, пройденных в каждый день)
         chart_data = (0..6).map do |days_ago|
-          date = Date.today - days_ago.days
+          date = Date.current - days_ago.days
           count = SessionAnswer.joins(study_session: :user)
                                .where(users: { id: Current.user.id })
-                               .where('DATE(study_sessions.finished_at) = ?', date).count
+                               .where(study_sessions: { finished_at: date.in_time_zone.all_day }).count
           { day: date.strftime("%a"), count: count }
         end
 
@@ -46,7 +46,7 @@ module Api
                                  .order(finished_at: :desc).limit(5)
                                  .map do |session|
           {
-            date: session.finished_at.strftime("%d.%m"),
+            date: session.finished_at.in_time_zone.strftime("%d.%m"),
             deck_title: session.deck.title,
             total: session.session_answers.count,
             correct: session.session_answers.where(is_correct: true).count
@@ -55,6 +55,8 @@ module Api
 
         render json: {
           cards_to_review: cards_to_review,
+          daily_goal: Current.user.daily_goal,
+          new_cards_today: Current.user.new_cards_studied_today,
           learned_words: learned_words,
           learned_delta: learned_delta,
           streak: streak,

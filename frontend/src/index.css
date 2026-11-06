@@ -1,4 +1,8 @@
 /* ---------- База ---------- */
+.profile-form { max-width: 640px; }
+.profile-form .auth__input { width: 100%; min-width: 0; box-sizing: border-box; }
+.profile-form .auth__field { margin-bottom: 24px; }
+
 :root {
   --bg: #ffffff;
   --bg-elev: #fafafa;

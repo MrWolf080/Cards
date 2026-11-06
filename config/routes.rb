@@ -4,6 +4,7 @@ Rails.application.routes.draw do
       resource :session, only: [:create, :destroy]
       resource :registration, only: [:create]
       resource :current_user, only: [:show]
+      resource :profile, only: [:show, :update]
       get 'dashboard', to: 'dashboard#show'
       resources :decks, only: [:index, :show, :create, :destroy] do
         resources :cards, only: [:index, :create, :destroy]

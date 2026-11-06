@@ -13,13 +13,13 @@ module Api
         # 2. Текущая серия дней (подряд)
         dates = Current.user.study_sessions.where.not(finished_at: nil)
                        .order(finished_at: :desc)
-                       .pluck(:finished_at).map(&:to_date).uniq
+                       .pluck(:finished_at).map { |time| time.in_time_zone.to_date }.uniq
         streak = 0
-        expected_date = Date.today
+        expected_date = Date.current
 
         # Если сегодня еще не занимались, проверяем со вчерашнего дня
-        if dates.first != Date.today && dates.first == Date.today - 1.day
-          expected_date = Date.today - 1.day
+        if dates.first != Date.current && dates.first == Date.current - 1.day
+          expected_date = Date.current - 1.day
         end
 
         dates.each do |date|
@@ -32,9 +32,7 @@ module Api
         end
 
         # 3. Дневная цель
-        today_answers = SessionAnswer.joins(study_session: :user)
-                                     .where(users: { id: Current.user.id })
-                                     .where('DATE(session_answers.created_at) = ?', Date.today).count
+        new_cards_today = Current.user.new_cards_studied_today
         daily_goal = Current.user.daily_goal || 20
 
         # 4. История сессий
@@ -46,7 +44,7 @@ module Api
           correct = session.session_answers.where(is_correct: true).count
           {
             id: session.id,
-            date: session.finished_at.strftime("%d.%m.%Y"),
+            date: session.finished_at.in_time_zone.strftime("%d.%m.%Y"),
             deck_title: session.deck.title,
             mode: session.mode == 'cards' ? 'Карточки' : 'Тест',
             correct: correct,
@@ -59,7 +57,7 @@ module Api
           accuracy: accuracy,
           streak: streak,
           daily_goal: daily_goal,
-          today_answers: today_answers,
+          new_cards_today: new_cards_today,
           history: history
         }
       end

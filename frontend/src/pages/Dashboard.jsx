@@ -33,6 +33,15 @@ export default function Dashboard() {
                     <Link to="/decks" className="btn">Начать повторение</Link>
                 </header>
 
+                <div className="card" style={{ marginBottom: '24px' }}>
+                    <h2 className="metric__label">Новые карточки сегодня</h2>
+                    <p className="metric__value">{data.new_cards_today} из {data.daily_goal}</p>
+                    <div className="progress" style={{ marginBottom: '16px' }}>
+                        <div className="progress__fill" style={{ width: `${Math.min(data.new_cards_today / data.daily_goal * 100, 100)}%` }} />
+                    </div>
+                    <Link to="/profile" className="link">Настроить дневную цель</Link>
+                </div>
+
                 {/* Сетка метрик */}
                 <div className="metrics">
                     <div className="metric">
