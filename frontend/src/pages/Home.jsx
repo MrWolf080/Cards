@@ -1,11 +1,11 @@
-import { Link, useNavigate, } from 'react-router-dom';
+import { Link, useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function Home() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
     // Если пользователь уже вошел, редиректим на панель
-    //if (user) return <Navigate to="/dashboard" replace />;
+    if (user) return <Navigate to="/dashboard" replace />;
 
     const handleLogout = async () => {
         try {
