@@ -286,6 +286,7 @@ export default function Deck() {
                                             <strong>{displayWord}</strong> <span className="suggestion-pos">{entry.part_of_speech}</span>
                                         </div>
                                         <div className="suggestion-trans">{displayTrans}</div>
+                                        {entry.example && <p className="page__subtitle">{entry.example}</p>}
                                         <div className="suggestion-actions">
                                             <button onClick={() => handleAdd(entry.id, index)} className="btn">Добавить</button>
                                             <button onClick={() => handleReplace(index)} className="btn btn--ghost">Другое</button>

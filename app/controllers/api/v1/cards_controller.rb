@@ -36,7 +36,8 @@ module Api
                                      .limit(count)
 
         render json: suggestions.map { |entry|
-          { id: entry.id, en: entry.en, ru: entry.ru, part_of_speech: entry.part_of_speech }
+          { id: entry.id, en: entry.en, ru: entry.ru, part_of_speech: entry.part_of_speech,
+            example: dictionary_example(entry, deck) }
         }
       end
 
@@ -81,8 +82,12 @@ module Api
         {
           front: deck.ru_en? ? entry.ru : entry.en,
           back: deck.ru_en? ? entry.en : entry.ru,
-          example: entry.example_en
+          example: dictionary_example(entry, deck)
         }
+      end
+
+      def dictionary_example(entry, deck)
+        deck.ru_en? ? entry.example_ru.presence || entry.example_en : entry.example_en
       end
     end
   end
