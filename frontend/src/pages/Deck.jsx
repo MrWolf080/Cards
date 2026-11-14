@@ -10,6 +10,42 @@ export default function Deck() {
     const [cards, setCards] = useState([]);
     const [suggestions, setSuggestions] = useState([]);
     const [search, setSearch] = useState('');
+    const [draft, setDraft] = useState(null);
+    const [saving, setSaving] = useState(false);
+    const [formError, setFormError] = useState('');
+
+    const openEditor = (card) => {
+        setFormError('');
+        setDraft({ id: card?.id, front: card?.front ?? '', back: card?.back ?? '', example: card?.example ?? '' });
+    };
+
+    const saveCard = async (event) => {
+        event.preventDefault();
+        setSaving(true);
+        setFormError('');
+        const { id: cardId, front, back, example } = draft;
+        const path = `/api/v1/decks/${id}/cards`;
+        try {
+            const response = await fetch(cardId ? `${path}/${cardId}` : path, {
+                method: cardId ? 'PATCH' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ card: { front, back, example } })
+            });
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                throw new Error(data.errors?.join('. ') || 'Не удалось сохранить карточку.');
+            }
+            setDraft(null);
+            const updated = await fetch(path, { credentials: 'include' });
+            if (!updated.ok) throw new Error('Карточка сохранена, но не удалось обновить список.');
+            setCards(await updated.json());
+        } catch (error) {
+            setFormError(error.message);
+        } finally {
+            setSaving(false);
+        }
+    };
 
     // 1. Функция для запроса подборки (возвращает данные)
     const fetchSuggestionsData = async (count = 5, excludeIds = []) => {
@@ -51,6 +87,8 @@ export default function Deck() {
 
     useEffect(() => {
         fetchData();
+        setDraft(null);
+        setFormError('');
     }, [id]);
 
     useUserUpdates(['card.changed', 'card.reviewed', 'deck.changed'], async () => {
@@ -163,6 +201,29 @@ export default function Deck() {
                     <Link to={`/study/${deck.id}`} className="btn">Учить колоду</Link>
                 </header>
 
+                <button type="button" className="btn btn--ghost" onClick={() => openEditor()} disabled={saving}>
+                    Добавить свою карточку
+                </button>
+                {formError && <p role="alert">{formError}</p>}
+                {draft && (
+                    <form onSubmit={saveCard} className="card profile-form" style={{ margin: '16px 0' }}>
+                        <h2>{draft.id ? 'Изменить карточку' : 'Новая карточка'}</h2>
+                        {[
+                            ['front', `Слово (${isRuEn ? 'RU' : 'EN'})`],
+                            ['back', `Перевод (${isRuEn ? 'EN' : 'RU'})`],
+                            ['example', 'Пример использования']
+                        ].map(([field, label]) => (
+                            <div className="auth__field" key={field}>
+                                <label className="auth__label" htmlFor={`card-${field}`}>{label}</label>
+                                <input id={`card-${field}`} className="auth__input" value={draft[field]}
+                                    required={field !== 'example'} disabled={saving}
+                                    onChange={event => setDraft({ ...draft, [field]: event.target.value })} />
+                            </div>
+                        ))}
+                        <button type="submit" className="btn" disabled={saving}>Сохранить карточку</button>{' '}
+                        <button type="button" className="btn btn--ghost" disabled={saving} onClick={() => { setDraft(null); setFormError(''); }}>Отмена</button>
+                    </form>
+                )}
                 <div className="deck-layout">
                     {/* ЛЕВАЯ КОЛОНКА: Карточки */}
                     <div className="deck-main card">
@@ -187,11 +248,12 @@ export default function Deck() {
                             <tbody>
                             {filteredCards.map(card => (
                                 <tr key={card.id}>
-                                    <td>{card.front}</td>
+                                    <td>{card.front}{card.example && <div className="page__subtitle">{card.example}</div>}</td>
                                     <td>{card.back}</td>
                                     <td>{formatStatus(card.status)}</td>
                                     <td>{formatNextReview(card.next_review)}</td>
                                     <td style={{ textAlign: 'right' }}>
+                                        <button onClick={() => openEditor(card)} disabled={saving} className="btn btn--ghost">Изменить</button>{' '}
                                         <button onClick={() => handleDeleteCard(card.id)} className="link-danger">Удалить</button>
                                     </td>
                                 </tr>

@@ -6,7 +6,9 @@ export function mergeStudyQueue(previous, incoming, retained, existingIds, avail
     for (const item of previous) {
         if (byId.has(key(item))) {
             const optionsValid = !availableAnswers || !item.options || item.options.every(option => availableAnswers.includes(option));
-            result.push(optionsValid ? item : byId.get(key(item)));
+            const updated = byId.get(key(item));
+            const sameQuestion = item.word === updated.word && item.correct_answer === updated.correct_answer;
+            result.push(item.options && optionsValid && sameQuestion ? { ...updated, options: item.options } : updated);
             byId.delete(key(item));
         }
     }

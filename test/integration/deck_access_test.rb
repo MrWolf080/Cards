@@ -1,9 +1,46 @@
 require "test_helper"
 
 class DeckAccessTest < ActionDispatch::IntegrationTest
+  include ActionCable::TestHelper
+
   setup do
     host! "web"
     sign_in_as(users(:one))
+  end
+
+  test "custom cards are validated and edits preserve progress and answers" do
+    deck = create_deck
+    path = "/api/v1/decks/#{deck.id}/cards"
+    assert_no_difference ["Card.count", "CardProgress.count"] do
+      post path, params: { card: { front: "   ", back: "перевод" } }, as: :json
+      assert_response :unprocessable_entity
+    end
+
+    post path, params: { card: { front: "  acomplish ", back: "выполнить" } }, as: :json
+    assert_response :created
+    card = deck.cards.sole
+    assert_equal "acomplish", card.front
+    assert card.card_progress.new_card?
+    assert_equal 0, card.card_progress.level
+    progress = card.card_progress
+    progress.update!(status: :learning, level: 2, next_review_at: Date.current + 3)
+    original_progress = progress.attributes
+    answer = create_answer(session: create_study_session(deck: deck), card: card, rating: :easy)
+
+    assert_broadcast_on(UserUpdatesChannel.broadcasting_for(deck.user),
+      type: "card.changed", data: { deck_id: deck.id, card_id: card.id }) do
+      patch "#{path}/#{card.id}", params: { card: { front: "accomplish", example: "I want to accomplish my goal." } }, as: :json
+      assert_response :no_content
+    end
+    assert_equal original_progress, progress.reload.attributes
+    assert_equal card.id, answer.reload.card_id
+    get path
+    assert_equal "accomplish", response.parsed_body.first["front"]
+    assert_equal "I want to accomplish my goal.", response.parsed_body.first["example"]
+
+    patch "#{path}/#{card.id}", params: { card: { back: "" } }, as: :json
+    assert_response :unprocessable_entity
+    assert_equal "выполнить", card.reload.back
   end
 
   test "dictionary content is copied in the selected direction and deletion removes progress" do
@@ -28,6 +65,7 @@ class DeckAccessTest < ActionDispatch::IntegrationTest
     card = create_card(deck: deck)
     session = create_study_session(deck: deck)
     entry = create_entry
+    own_deck = create_deck
     assert_no_difference ["Deck.count", "Card.count", "CardProgress.count", "SessionAnswer.count"] do
       %W[/api/v1/decks/#{deck.id} /api/v1/decks/#{deck.id}/cards /api/v1/decks/#{deck.id}/suggestions /api/v1/decks/#{deck.id}/study /api/v1/decks/#{deck.id}/quiz].each do |path|
         get path
@@ -41,12 +79,16 @@ class DeckAccessTest < ActionDispatch::IntegrationTest
       assert_response :not_found
       delete "/api/v1/decks/#{deck.id}/cards/#{card.id}"
       assert_response :not_found
+      patch "/api/v1/decks/#{deck.id}/cards/#{card.id}", params: { card: { front: "Forbidden edit" } }, as: :json
+      assert_response :not_found
+      patch "/api/v1/decks/#{own_deck.id}/cards/#{card.id}", params: { card: { front: "Forbidden edit" } }, as: :json
+      assert_response :not_found
       delete "/api/v1/decks/#{deck.id}"
       assert_response :not_found
     end
     assert_nil session.reload.finished_at
     assert_equal 0, card.card_progress.reload.level
     get "/api/v1/decks"
-    assert_empty response.parsed_body
+    assert_equal [own_deck.id], response.parsed_body.pluck("id")
   end
 end

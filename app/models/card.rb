@@ -1,5 +1,8 @@
 class Card < ApplicationRecord
-  after_commit :broadcast_change, on: [:create, :destroy]
+  after_commit :broadcast_change, on: [:create, :update, :destroy]
+
+  normalizes :front, :back, :example, with: ->(text) { text.strip }
+  validates :front, :back, presence: true
 
   private def broadcast_change
     UserUpdatesChannel.broadcast_to(deck.user, type: "card.changed", data: { deck_id: deck_id, card_id: id })

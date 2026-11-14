@@ -11,6 +11,7 @@ module Api
             id: card.id,
             front: card.front,
             back: card.back,
+            example: card.example,
             status: card.card_progress.status,
             next_review: card.card_progress.next_review_at
           }
@@ -42,17 +43,7 @@ module Api
       # POST /api/v1/decks/:deck_id/cards
       def create
         deck = Current.user.decks.find(params[:deck_id])
-        entry = DictionaryEntry.find(params[:dictionary_entry_id])
-
-        # 👇 Проверяем направление колоды. Если ru_en — меняем слова местами
-        front_word = deck.ru_en? ? entry.ru : entry.en
-        back_word  = deck.ru_en? ? entry.en : entry.ru
-
-        card = deck.cards.build(
-          front: front_word,
-          back: back_word,
-          example: entry.example_en
-        )
+        card = deck.cards.build(params.key?(:dictionary_entry_id) ? dictionary_attributes(deck) : card_params)
 
         Card.transaction do
           card.save!
@@ -63,12 +54,35 @@ module Api
         render json: { errors: error.record.errors.full_messages }, status: :unprocessable_entity
       end
 
+      def update
+        deck = Current.user.decks.find(params[:deck_id])
+        deck.cards.find(params[:id]).update!(card_params)
+        head :no_content
+      rescue ActiveRecord::RecordInvalid => error
+        render json: { errors: error.record.errors.full_messages }, status: :unprocessable_entity
+      end
+
       # DELETE /api/v1/decks/:deck_id/cards/:id
       def destroy
         deck = Current.user.decks.find(params[:deck_id])
         card = deck.cards.find(params[:id])
         card.destroy
         head :no_content
+      end
+
+      private
+
+      def card_params
+        params.require(:card).permit(:front, :back, :example)
+      end
+
+      def dictionary_attributes(deck)
+        entry = DictionaryEntry.find(params[:dictionary_entry_id])
+        {
+          front: deck.ru_en? ? entry.ru : entry.en,
+          back: deck.ru_en? ? entry.en : entry.ru,
+          example: entry.example_en
+        }
       end
     end
   end
