@@ -57,6 +57,27 @@ Rails.application.configure do
   # Set host to be used by links generated in mailer templates.
   config.action_mailer.default_url_options = { host: "example.com" }
 
+  if ENV["SMTP_ADDRESS"].present?
+    smtp_security = ENV.fetch("SMTP_SECURITY", "starttls")
+    raise ArgumentError, "SMTP_SECURITY must be starttls or tls" unless %w[starttls tls].include?(smtp_security)
+    ENV.fetch("MAIL_FROM")
+    ENV.fetch("APP_URL")
+    config.action_mailer.delivery_method = :smtp
+    config.action_mailer.raise_delivery_errors = true
+    config.action_mailer.smtp_settings = {
+      address: ENV.fetch("SMTP_ADDRESS"),
+      port: Integer(ENV["SMTP_PORT"].presence || (smtp_security == "tls" ? 465 : 587)),
+      user_name: ENV.fetch("SMTP_USERNAME"),
+      password: ENV.fetch("SMTP_PASSWORD"),
+      authentication: :plain,
+      enable_starttls: smtp_security == "starttls",
+      enable_starttls_auto: false,
+      ssl: smtp_security == "tls",
+      open_timeout: 10,
+      read_timeout: 10
+    }
+  end
+
   # Specify outgoing SMTP server. Remember to add smtp/* credentials via bin/rails credentials:edit.
   # config.action_mailer.smtp_settings = {
   #   user_name: Rails.application.credentials.dig(:smtp, :user_name),

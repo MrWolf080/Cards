@@ -28,6 +28,13 @@
         - "3000:3000"
       environment:
         RAILS_ENV: development
+        SMTP_ADDRESS: ${SMTP_ADDRESS:-mailpit}
+        SMTP_PORT: ${SMTP_PORT:-}
+        SMTP_SECURITY: ${SMTP_SECURITY:-}
+        SMTP_USERNAME: ${SMTP_USERNAME:-}
+        SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+        MAIL_FROM: ${MAIL_FROM:-from@example.com}
+        APP_URL: ${APP_URL:-http://localhost:5173}
         DATABASE_URL: postgres://postgres:password@db:5432/myapp_development
         RAILS_LOG_TO_STDOUT: "true"
         # Для дебага в контейнере

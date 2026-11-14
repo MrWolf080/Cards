@@ -29,8 +29,31 @@ Rails.application.configure do
   # Store uploaded files on the local file system (see config/storage.yml for options).
   config.active_storage.service = :local
 
-  # Don't care if the mailer can't send.
-  config.action_mailer.raise_delivery_errors = false
+  config.action_mailer.delivery_method = :smtp
+  config.action_mailer.raise_delivery_errors = true
+  smtp_address = ENV.fetch("SMTP_ADDRESS", "127.0.0.1")
+  local_smtp = %w[mailpit localhost 127.0.0.1 ::1].include?(smtp_address)
+  smtp_security = ENV["SMTP_SECURITY"].presence || (local_smtp ? "none" : "starttls")
+  unless %w[starttls tls].include?(smtp_security) || (local_smtp && smtp_security == "none")
+    raise ArgumentError, "SMTP_SECURITY must be starttls or tls for external SMTP"
+  end
+  smtp_default_port = { "none" => 1025, "starttls" => 587, "tls" => 465 }.fetch(smtp_security)
+  config.action_mailer.smtp_settings = {
+    address: smtp_address,
+    port: Integer(ENV["SMTP_PORT"].presence || smtp_default_port),
+    enable_starttls: smtp_security == "starttls",
+    enable_starttls_auto: false,
+    ssl: smtp_security == "tls",
+    open_timeout: 5,
+    read_timeout: 5
+  }
+  unless local_smtp
+    config.action_mailer.smtp_settings.merge!(
+      user_name: ENV.fetch("SMTP_USERNAME").presence || raise("SMTP_USERNAME is required"),
+      password: ENV.fetch("SMTP_PASSWORD").presence || raise("SMTP_PASSWORD is required"),
+      authentication: :plain
+    )
+  end
 
   # Make template changes take effect immediately.
   config.action_mailer.perform_caching = false
