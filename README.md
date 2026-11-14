@@ -2,15 +2,9 @@
 
 ## Напоминания по email
 
-Для локальной проверки запустите `docker compose up -d db web mailpit` и откройте http://localhost:8025. Rails в Docker подключается к `mailpit:1025`, а Rails, запущенный на хосте, использует `127.0.0.1:1025`. Mailpit сохраняет письма для просмотра в браузере.
+Solid Queue проверяет расписание каждый час в development и production. После 09:00 по часовому поясу пользователя он отправляет одно письмо за местный день, если есть карточки с датой повторения на сегодня.
 
-Отправить пробное письмо в локальный Mailpit:
-
-```bash
-docker compose exec -T web bin/rails runner 'ReviewReminderMailer.with(user: User.new(email_address: "preview@example.test"), count: 2).daily.deliver_now'
-```
-
-Solid Queue проверяет расписание каждый час в production. После 09:00 по часовому поясу пользователя он отправляет одно письмо за местный день, если есть карточки с датой повторения на сегодня.
+В development через Docker Compose контейнер `web` подготавливает отдельную базу очереди и запускает Solid Queue вместе с Puma.
 
 Для отправки через внешний SMTP из локального Docker создайте файл `.env` в корне проекта. Git игнорирует этот файл. Подставьте настройки вашего провайдера и подтверждённый адрес отправителя.
 
@@ -24,7 +18,13 @@ MAIL_FROM=sender@example.com
 APP_URL=https://cards.example.com
 ```
 
-Если провайдер требует TLS с момента подключения, укажите `SMTP_SECURITY=tls` и его SMTP-порт. `APP_URL` должен быть доступен получателям письма. После заполнения пересоздайте контейнер командой `docker compose up -d db web`. Для проверки используйте команду пробного письма выше, подставив свой email вместо `preview@example.test`. Для автоматической почасовой отправки используйте production и Solid Queue.
+Если провайдер требует TLS с момента подключения, укажите `SMTP_SECURITY=tls` и его SMTP-порт. `APP_URL` должен быть доступен получателям письма. После заполнения пересоздайте контейнер командой `docker compose up -d db web`.
+
+Чтобы проверить отправку через внешний SMTP, подставьте свой email вместо `preview@example.test` и выполните команду:
+
+```bash
+docker compose exec -T web bin/rails runner 'ReviewReminderMailer.with(user: User.new(email_address: "preview@example.test"), count: 2).daily.deliver_now'
+```
 
 Примените `bin/rails db:prepare` и запустите Solid Queue через `bin/jobs` или существующий режим `SOLID_QUEUE_IN_PUMA=true`. Передайте веб-приложению и обработчику задач переменные `SMTP_ADDRESS`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `MAIL_FROM` и `APP_URL` (публичный адрес фронтенда). Порт SMTP задаётся через `SMTP_PORT`, по умолчанию 587. Без `SMTP_ADDRESS` рассылка в production выключена.
 

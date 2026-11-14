@@ -29,6 +29,9 @@ Rails.application.configure do
   # Store uploaded files on the local file system (see config/storage.yml for options).
   config.active_storage.service = :local
 
+  config.active_job.queue_adapter = :solid_queue
+  config.solid_queue.connects_to = { database: { writing: :queue } }
+
   config.action_mailer.delivery_method = :smtp
   config.action_mailer.raise_delivery_errors = true
   smtp_address = ENV.fetch("SMTP_ADDRESS", "127.0.0.1")
