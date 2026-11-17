@@ -9,6 +9,8 @@ export default function Deck() {
     const [deck, setDeck] = useState(null);
     const [cards, setCards] = useState([]);
     const [suggestions, setSuggestions] = useState([]);
+    const [updatingSuggestions, setUpdatingSuggestions] = useState(false);
+    const [suggestionError, setSuggestionError] = useState('');
     const [search, setSearch] = useState('');
     const [draft, setDraft] = useState(null);
     const [saving, setSaving] = useState(false);
@@ -48,22 +50,22 @@ export default function Deck() {
     };
 
     // 1. Функция для запроса подборки (возвращает данные)
-    const fetchSuggestionsData = async (count = 5, excludeIds = []) => {
+    const fetchSuggestionsData = async (count = 5, excludeIds = [], skippedIds = []) => {
         let url = `/api/v1/decks/${id}/suggestions?count=${count}`;
+        if (skippedIds.length) url = url.replace('/suggestions?', '/suggestions/skip?');
         excludeIds.forEach(exId => {
             url += `&exclude[]=${exId}`;
         });
 
-        try {
-            const res = await fetch(url, { credentials: 'include' });
-            if (res.ok) {
-                return await res.json();
-            }
-            return [];
-        } catch (err) {
-            console.error("Ошибка загрузки подборки:", err);
-            return [];
-        }
+        const options = { credentials: 'include' };
+        if (skippedIds.length) Object.assign(options, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: skippedIds })
+        });
+        const res = await fetch(url, options);
+        if (!res.ok) throw new Error('Не удалось обновить подборку.');
+        return res.json();
     };
 
     // 2. Начальная загрузка страницы
@@ -101,51 +103,51 @@ export default function Deck() {
         setCards(await cardsRes.json());
     }, id);
 
-    // 3. Кнопка "Обновить все"
-    const handleRefreshAll = async () => {
-        const newWords = await fetchSuggestionsData(5, []);
-        setSuggestions(newWords);
-    };
-
-    // 4. Кнопка "Другое" (замена одного слова)
-    const handleReplace = async (index) => {
-        const currentIds = suggestions.map(s => s.id);
-        const newWords = await fetchSuggestionsData(1, currentIds);
-
-        if (newWords.length > 0) {
-            const newSuggestions = [...suggestions];
-            newSuggestions[index] = newWords[0];
-            setSuggestions(newSuggestions);
-        } else {
-            alert("В словаре больше нет новых слов.");
+    const updateSuggestions = async (action) => {
+        setUpdatingSuggestions(true);
+        setSuggestionError('');
+        try {
+            await action();
+        } catch (error) {
+            setSuggestionError(error.message);
+        } finally {
+            setUpdatingSuggestions(false);
         }
     };
 
-    // 5. Добавление карточки
-    // Добавление карточки (теперь принимает индекс слова в подборке)
-    const handleAdd = async (entryId, index) => {
-        // 1. Отправляем запрос на добавление карточки в колоду
-        await fetch(`/api/v1/decks/${id}/cards`, {
+    const handleRefreshAll = () => updateSuggestions(async () => {
+        setSuggestions(await fetchSuggestionsData(5, [], suggestions.map(entry => entry.id)));
+    });
+
+    const replaceSuggestion = async (index, skippedIds = []) => {
+        const replacement = await fetchSuggestionsData(1, suggestions.map(entry => entry.id), skippedIds);
+        setSuggestions(suggestions.flatMap((entry, position) => position === index ? replacement : [entry]));
+    };
+
+    const handleReplace = (index) => updateSuggestions(() => replaceSuggestion(index, [suggestions[index].id]));
+
+    const resetViews = () => updateSuggestions(async () => {
+        const response = await fetch('/api/v1/dictionary/views', { method: 'DELETE', credentials: 'include' });
+        if (!response.ok) throw new Error('Не удалось сбросить просмотренные слова.');
+        setSuggestions(await fetchSuggestionsData());
+    });
+
+    const handleAdd = (entryId, index) => updateSuggestions(async () => {
+        const response = await fetch(`/api/v1/decks/${id}/cards`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify({ dictionary_entry_id: entryId })
         });
+        if (!response.ok) throw new Error('Не удалось добавить карточку.');
 
         // 2. Обновляем список карточек слева
         const cardsRes = await fetch(`/api/v1/decks/${id}/cards`, { credentials: 'include' });
         setCards(await cardsRes.json());
 
         // 3. Заменяем только одно слово в подборке справа
-        const currentIds = suggestions.map(s => s.id);
-        const newWords = await fetchSuggestionsData(1, currentIds);
-
-        if (newWords.length > 0) {
-            const newSuggestions = [...suggestions];
-            newSuggestions[index] = newWords[0]; // Меняем слово по индексу
-            setSuggestions(newSuggestions);
-        }
-    };
+        await replaceSuggestion(index);
+    });
 
     // 6. Удаление карточки
     const handleDeleteCard = async (cardId) => {
@@ -272,7 +274,10 @@ export default function Deck() {
                     {/* ПРАВАЯ КОЛОНКА: Подбор слов */}
                     <div className="deck-sidebar card">
                         <h3 className="sidebar-title">Подбор слов</h3>
-                        <p className="page__subtitle" style={{ marginBottom: '20px', fontSize: '0.8rem' }}>Случайные слова из словаря</p>
+                        <p className="page__subtitle">Популярные слова из словаря</p>
+                        <button type="button" onClick={resetViews} disabled={updatingSuggestions} className="btn btn--ghost">Сбросить просмотренные слова</button>
+                        {suggestionError && <p role="alert">{suggestionError}</p>}
+                        {!suggestions.length && !updatingSuggestions && <p>Нет доступных слов для подбора.</p>}
 
                         <div className="suggestions-list">
                             {suggestions.map((entry, index) => {
@@ -288,15 +293,15 @@ export default function Deck() {
                                         <div className="suggestion-trans">{displayTrans}</div>
                                         {entry.example && <p className="page__subtitle">{entry.example}</p>}
                                         <div className="suggestion-actions">
-                                            <button onClick={() => handleAdd(entry.id, index)} className="btn">Добавить</button>
-                                            <button onClick={() => handleReplace(index)} className="btn btn--ghost">Другое</button>
+                                            <button onClick={() => handleAdd(entry.id, index)} disabled={updatingSuggestions} className="btn">Добавить</button>
+                                            <button onClick={() => handleReplace(index)} disabled={updatingSuggestions} className="btn btn--ghost">Обновить</button>
                                         </div>
                                     </div>
                                 );
                             })}
                         </div>
 
-                        <button onClick={handleRefreshAll} className="btn btn--ghost" style={{ width: '100%', marginTop: '16px' }}>
+                        <button onClick={handleRefreshAll} disabled={updatingSuggestions} className="btn btn--ghost" style={{ width: '100%', marginTop: '16px' }}>
                             Обновить все
                         </button>
                     </div>

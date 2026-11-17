@@ -3,6 +3,35 @@ require "test_helper"
 class DeckAccessTest < ActionDispatch::IntegrationTest
   include ActionCable::TestHelper
 
+  test "suggestions use popularity then frequency and skips belong to the current user" do
+    deck = create_deck
+    frequent = create_entry(en: "first", ru: "первый", rank: 1)
+    popular = create_entry(en: "second", ru: "второй", rank: 2)
+    create_entry(en: "second", ru: "секунда", rank: 3)
+    other_deck = create_deck(user: users(:two))
+    path = "/api/v1/decks/#{deck.id}/suggestions"
+
+    get path
+    assert_equal [frequent.id, popular.id], response.parsed_body.pluck("id")
+    post "/api/v1/decks/#{deck.id}/cards", params: { dictionary_entry_id: popular.id }, as: :json
+    assert_response :created
+    assert_equal 1, popular.reload.popular
+
+    sign_in_as(users(:two))
+    other_path = "/api/v1/decks/#{other_deck.id}/suggestions"
+    get other_path
+    assert_equal [popular.id, frequent.id], response.parsed_body.pluck("id")
+    post "#{other_path}/skip", params: { ids: [popular.id] }, as: :json
+    assert_equal [frequent.id], response.parsed_body.pluck("id")
+    get other_path
+    assert_equal [frequent.id], response.parsed_body.pluck("id")
+    assert_empty users(:one).dictionary_views
+    delete "/api/v1/dictionary/views"
+    assert_response :no_content
+    get other_path
+    assert_equal [popular.id, frequent.id], response.parsed_body.pluck("id")
+  end
+
   setup do
     host! "web"
     sign_in_as(users(:one))

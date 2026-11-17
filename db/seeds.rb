@@ -7,9 +7,6 @@
 #   ["Action", "Comedy", "Drama", "Horror"].each do |genre_name|
 #     MovieGenre.find_or_create_by!(name: genre_name)
 #   end
-puts "Очистка старого словаря..."
-DictionaryEntry.destroy_all
-
 puts "Запуск импорта словаря..."
 
 # Находим все файлы в папке db/words и загружаем их по очереди

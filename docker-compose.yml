@@ -10,7 +10,7 @@
       volumes:
         - ./pg_data:/var/lib/postgresql/data
       ports:
-        - "5432:5432"     # удобно подключаться с хоста (psql, GUI)
+        - "127.0.0.1:5432:5432"     # удобно подключаться с хоста (psql, GUI)
 
     web:
       build:

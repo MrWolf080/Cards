@@ -6,10 +6,12 @@ Rails.application.routes.draw do
       resource :registration, only: [:create]
       resource :current_user, only: [:show]
       resource :profile, only: [:show, :update]
+      delete 'dictionary/views', to: 'cards#reset_dictionary_views'
       get 'dashboard', to: 'dashboard#show'
       resources :decks, only: [:index, :show, :create, :destroy] do
         resources :cards, only: [:index, :create, :update, :destroy]
         get 'suggestions', to: 'cards#suggestions'
+        post 'suggestions/skip', to: 'cards#skip_suggestions'
 
         get 'study', to: 'study#index'
         post 'study/answer', to: 'study#answer'

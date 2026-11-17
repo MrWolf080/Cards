@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_14_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_17_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -53,7 +53,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_14_120000) do
     t.string "source"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "popular", default: 0, null: false
     t.index ["en", "ru"], name: "index_dictionary_entries_on_en_ru_pos", unique: true
+    t.index ["popular", "rank", "id"], name: "index_dictionary_entries_on_popular_and_rank_and_id", order: { popular: :desc }
+  end
+
+  create_table "dictionary_views", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "word", null: false
+    t.index ["user_id", "word"], name: "index_dictionary_views_on_user_id_and_word", unique: true
   end
 
   create_table "session_answers", force: :cascade do |t|
@@ -102,6 +110,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_14_120000) do
   add_foreign_key "card_progresses", "cards"
   add_foreign_key "cards", "decks"
   add_foreign_key "decks", "users"
+  add_foreign_key "dictionary_views", "users", on_delete: :cascade
   add_foreign_key "session_answers", "cards"
   add_foreign_key "session_answers", "study_sessions"
   add_foreign_key "sessions", "users"
