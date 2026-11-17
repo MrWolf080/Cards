@@ -26,6 +26,7 @@ export default function Header() {
                 <nav className="app-header__nav">
                     <Link to="/dashboard">Панель</Link>
                     <Link to="/decks">Колоды</Link>
+                    <Link to="/decks/popular">Популярные колоды</Link>
                     <Link to="/stats">Статистика</Link>
                 </nav>
 

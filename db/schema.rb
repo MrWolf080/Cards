@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_17_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_17_150000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -40,7 +40,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_17_120000) do
     t.integer "direction"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.boolean "shared", default: false, null: false
+    t.integer "copies_count", default: 0, null: false
+    t.bigint "source_deck_id"
+    t.boolean "copied", default: false, null: false
+    t.index ["source_deck_id"], name: "index_decks_on_source_deck_id"
+    t.index ["user_id", "source_deck_id"], name: "index_decks_on_user_id_and_source_deck_id", unique: true
     t.index ["user_id"], name: "index_decks_on_user_id"
+    t.check_constraint "NOT shared OR NOT copied AND source_deck_id IS NULL", name: "shared_decks_must_be_originals"
   end
 
   create_table "dictionary_entries", force: :cascade do |t|
@@ -109,6 +116,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_17_120000) do
 
   add_foreign_key "card_progresses", "cards"
   add_foreign_key "cards", "decks"
+  add_foreign_key "decks", "decks", column: "source_deck_id", on_delete: :nullify
   add_foreign_key "decks", "users"
   add_foreign_key "dictionary_views", "users", on_delete: :cascade
   add_foreign_key "session_answers", "cards"

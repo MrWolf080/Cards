@@ -13,6 +13,26 @@ export default function Decks() {
     const [newDirection, setNewDirection] = useState('en_ru');
 
     const navigate = useNavigate();
+    const [sharingId, setSharingId] = useState(null);
+
+    const changeSharing = async deck => {
+        setSharingId(deck.id);
+        try {
+            const response = await fetch(`/api/v1/decks/${deck.id}/sharing`, {
+                method: 'PATCH',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sharing: { shared: !deck.shared } })
+            });
+            if (!response.ok) throw new Error('Не удалось изменить публикацию колоды.');
+            const { shared } = await response.json();
+            setDecks(previous => previous.map(item => item.id === deck.id ? { ...item, shared } : item));
+        } catch (error) {
+            alert(error.message);
+        } finally {
+            setSharingId(null);
+        }
+    };
 
     // Загрузка колод при монтировании
     const fetchDecks = () => {
@@ -147,6 +167,10 @@ export default function Decks() {
                       {deck.learned_cards} из {deck.total_cards} выучено · к повторению: {deck.to_review}
                     </span>
                                         <div className="deck-card__actions">
+                                            {!deck.copied && <button className="btn btn--ghost" disabled={sharingId !== null}
+                                                onClick={() => changeSharing(deck)}>
+                                                {deck.shared ? 'Снять с публикации' : 'Поделиться колодой'}
+                                            </button>}
                                             {/* 👇 Новая кнопка удаления */}
                                             <button
                                                 onClick={() => handleDelete(deck.id)}

@@ -10,6 +10,8 @@ import Quiz from "./pages/Quiz.jsx";
 import Dashboard from './pages/Dashboard.jsx';
 import Stats from './pages/Stats.jsx';
 import Profile from './pages/Profile.jsx';
+import PopularDecks from './pages/PopularDecks.jsx';
+import DeckPreview from './pages/DeckPreview.jsx';
 
 function RequireAuth() {
   const { user, loading } = useAuth();
@@ -27,6 +29,8 @@ function App() {
           <Route element={<RequireAuth />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/decks" element={<Decks />} />
+            <Route path="/decks/popular" element={<PopularDecks />} />
+            <Route path="/decks/popular/:id" element={<DeckPreview />} />
             <Route path="/decks/:id" element={<Deck />} />
             <Route path="/study/:id" element={<Study />} />
             <Route path="/study/:id/quiz" element={<Quiz />} />

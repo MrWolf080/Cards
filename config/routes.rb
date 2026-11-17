@@ -9,6 +9,10 @@ Rails.application.routes.draw do
       delete 'dictionary/views', to: 'cards#reset_dictionary_views'
       get 'dashboard', to: 'dashboard#show'
       resources :decks, only: [:index, :show, :create, :destroy] do
+        get :popular, on: :collection
+        get :preview, on: :member
+        patch :sharing, on: :member
+        post :copy, on: :member
         resources :cards, only: [:index, :create, :update, :destroy]
         get 'suggestions', to: 'cards#suggestions'
         post 'suggestions/skip', to: 'cards#skip_suggestions'

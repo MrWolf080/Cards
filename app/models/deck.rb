@@ -6,6 +6,7 @@ class Deck < ApplicationRecord
   end
 
   belongs_to :user
+  belongs_to :source_deck, class_name: "Deck", optional: true, counter_cache: :copies_count
   has_many :cards, dependent: :destroy
   has_many :study_sessions, dependent: :destroy
 
